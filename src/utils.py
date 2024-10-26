@@ -1,24 +1,50 @@
-import logging
 import os
 import random
 import sys
 import time
-
 from selenium import webdriver
 from loguru import logger
 
-from app_config import MINIMUM_LOG_LEVEL
+from app_config import MINIMUM_LOG_LEVEL, LOG_TO_FILE, LOG_TO_CONSOLE
 
-log_file = "app_log.log"
+log_file = "log/app.log"
 
+# Ensure the log directory exists
+os.makedirs(os.path.dirname(log_file), exist_ok=True)
 
-if MINIMUM_LOG_LEVEL in ["DEBUG", "TRACE", "INFO", "WARNING", "ERROR", "CRITICAL"]:
-    logger.remove()
-    logger.add(sys.stderr, level=MINIMUM_LOG_LEVEL)
-else:
-    logger.warning(f"Invalid log level: {MINIMUM_LOG_LEVEL}. Defaulting to DEBUG.")
-    logger.remove()
-    logger.add(sys.stderr, level="DEBUG")
+# Remove default logger
+logger.remove()
+
+# Configure Loguru logger
+config = {
+    "handlers": []
+}
+
+# Add file logger if LOG_TO_FILE is True
+if LOG_TO_FILE:
+    config["handlers"].append({
+        "sink": log_file,
+        "level": MINIMUM_LOG_LEVEL,
+        "rotation": "10 MB",
+        "retention": "1 week",
+        "compression": "zip",
+        "format": "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+    })
+
+# Add console logger if LOG_TO_CONSOLE is True
+if LOG_TO_CONSOLE:
+    config["handlers"].append({
+        "sink": sys.stderr,
+        "level": MINIMUM_LOG_LEVEL,
+        "format": "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+    })
+
+# Configure Loguru with the new settings
+logger.configure(**config)
+
+# Intercept Selenium's logging
+from selenium.webdriver.remote.remote_connection import LOGGER as selenium_logger
+selenium_logger.setLevel(MINIMUM_LOG_LEVEL)
 
 chromeProfilePath = os.path.join(os.getcwd(), "chrome_profile", "linkedin_profile")
 
@@ -33,14 +59,12 @@ def ensure_chrome_profile():
         logger.debug(f"Created Chrome profile directory: {chromeProfilePath}")
     return chromeProfilePath
 
-
 def is_scrollable(element):
     scroll_height = element.get_attribute("scrollHeight")
     client_height = element.get_attribute("clientHeight")
     scrollable = int(scroll_height) > int(client_height)
     logger.debug(f"Element scrollable check: scrollHeight={scroll_height}, clientHeight={client_height}, scrollable={scrollable}")
     return scrollable
-
 
 def scroll_slow(driver, scrollable_element, start=0, end=3600, step=300, reverse=False):
     logger.debug(f"Starting slow scroll: start={start}, end={end}, step={step}, reverse={reverse}")
@@ -110,7 +134,6 @@ def scroll_slow(driver, scrollable_element, start=0, end=3600, step=300, reverse
     except Exception as e:
         logger.error(f"Exception occurred during scrolling: {e}")
 
-
 def chrome_browser_options():
     logger.debug("Setting Chrome browser options")
     ensure_chrome_profile()
@@ -153,13 +176,11 @@ def chrome_browser_options():
 
     return options
 
-
 def printred(text):
     red = "\033[91m"
     reset = "\033[0m"
     logger.debug("Printing text in red: %s", text)
     print(f"{red}{text}{reset}")
-
 
 def printyellow(text):
     yellow = "\033[93m"
